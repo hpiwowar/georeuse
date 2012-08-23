@@ -27,8 +27,8 @@ VERBOSE = False
 
 #base_query = """(GEO[text] OR omnibus[text]) NOT "pmc gds"[filter]"""
 #base_query = """(GEO[text] OR omnibus[text]) NOT "pmc gds"[filter] AND ("1900"[PubDate] : "2009"[PubDate])"""
-base_query_reuse = """("1900"[PubDate] : "2010/06/30"[PubDate]) NOT "pmc gds"[filter]"""
-base_query_submit = """("1900"[PubDate] : "2010/06/30"[PubDate]) AND "pmc gds"[filter]"""
+base_query_reuse = """("1900"[PubDate] : "2012/06/30"[PubDate]) NOT "pmc gds"[filter]"""
+base_query_submit = """("1900"[PubDate] : "2012/06/30"[PubDate]) AND "pmc gds"[filter]"""
 
 #url_for_gse = """http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=gds&term=GSE[ETYP]&retmax=10000&usehistory=n"""
 #url_for_gds = """http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=gds&term=GDS[ETYP]&retmax=10000&usehistory=n"""
@@ -199,7 +199,7 @@ def get_response_dict(id_type, ids, pmc_query):
         print accession,
         id_counter += 1
         reuse_pmcids = get_accession_in_pmc_fulltext(id_type, accession, pmc_query)        
-        if not reuse_pmcids:
+        if ((not reuse_pmcids) or ("<ERROR>" in "".join(reuse_pmcids))):
             print " Nope"
             continue
         stripped_accession = geo.get_stripped_accession(accession)  
@@ -309,12 +309,12 @@ def estimate_pmc_coverage(query, start_year="1800", end_year="3000"):
 fields = "accession	gse	gds	submit_pmids	reuse_pmcid	reuse_pmids_for_pmc	this_submit_authors	this_reuse_authors	intersect	submit_affiliation	release_date	sep1	bioloink_filter	basic_reuse_filter	creation_filter	oa_excerpts	word_filters	sep2	reuse_affiliation	journal	year	date_published	medline_status	is_geo_reuse	reuse_is_oa	metaanal	mesh_filters".split("\t")
 
 def get_excerpts():
-    lines = open("scienceplot/results/reuse_pmcids.txt").readlines()
+    lines = open("scienceplot_new/results/reuse_pmcids.txt").readlines()
     accessions = [line.split("\t")[0].strip() for line in lines]
     reuse_pmcids = [line.split("\t")[1].strip() for line in lines]
-    cached_article_dir = "scienceplot/articles"
+    cached_article_dir = "scienceplot_new/articles"
     oa_excerpts     = oaexcerpt.get_oa_excerpts(reuse_pmcids, "(GSE.\d|GDS.\d|omnibus|download|publicly)", 200, 200, re.IGNORECASE|re.MULTILINE, cached_article_dir)
-    excerpts_file = open("scienceplot/results/excerpts.txt", "w")
+    excerpts_file = open("scienceplot_new/results/excerpts.txt", "w")
     for (accession, pmcid, excerpt) in zip(accessions, reuse_pmcids, oa_excerpts):
         lookup_number = accession[3:]  # remove the prefix
         excerpt_tagged = re.sub(lookup_number, lookup_number + "{{tag}}", excerpt)        
@@ -327,11 +327,11 @@ def run_stats(geo_years, id_types, base_query):
         print "\n\n****\n", geo_year
         for id_type in id_types:
             response_dict[(id_type, geo_year)] = get_from_query_gds_in_pmc_fulltext_dict(id_type, base_query, geo_year)
-            pkl_file = open("scienceplot/results/" + id_type + "_dict" + geo_year + "b.pkl", "wb")
+            pkl_file = open("scienceplot_new/results/" + id_type + "_dict" + geo_year + "b.pkl", "wb")
             pickle.dump(response_dict[(id_type, geo_year)], pkl_file)
             pkl_file.close()
     
-            fh = open("scienceplot/results/" + id_type + geo_year + "b.csv", "w")
+            fh = open("scienceplot_new/results/" + id_type + geo_year + "b.csv", "w")
             header = ",".join(fields)
             fh.write(header + "\n")
             dataset.csv_write_to_file(fh, response_dict[(id_type, geo_year)].values())
@@ -339,37 +339,50 @@ def run_stats(geo_years, id_types, base_query):
 
     return(response_dict)
 
-#geo_years = [str(year) for year in range(2000,2002)]
-geo_years = [str(year) for year in range(2000,2011)]
-#geo_years = [str(year) for year in range(2008,2010)]
+geo_years = [str(year) for year in range(2000,2012)]
 id_types = ["GSE", "GDS"]
 
+fh = open("scienceplot_new/results/pubmed_pmc_ratios.csv", "w")
+ratio_fields = ["year", "num_pmc", "num_pubmed", "pmc_pmid_ratio"]
+writer = csv.DictWriter(fh, ratio_fields)
+writer.writerow(dict((fn,fn) for fn in writer.fieldnames))
 for year in geo_years:
     (num_pmc, num_pubmed, ratio) = estimate_pmc_coverage('"gene expression profiling"[mesh]', year, year)
-    print "\t".join([year, str(num_pmc), str(num_pubmed), str(round(100*ratio))])
+    row_dict = dict(year=year, num_pmc=num_pmc, num_pubmed=num_pubmed, pmc_pmid_ratio=round(100*ratio))
+    print row_dict.values()
+    writer.writerow(row_dict)
+fh.close()
 
-#submission_years = [str(year) for year in range(2007,2008)]
-submission_years = [str(year) for year in range(2006,2007)]
-updated_base_query_all = """("1901"[PubDate] : "2010/12/31"[PubDate])"""
-updated_base_query_reuse = """("1901"[PubDate] : "2010/12/31"[PubDate]) NOT "pmc gds"[filter]"""
-updated_base_query_create = """("1901"[PubDate] : "2010/12/31"[PubDate]) AND "pmc gds"[filter]"""
+updated_base_query_all = """("1901"[PubDate] : "2011/12/31"[PubDate])"""
+updated_base_query_reuse = """("1901"[PubDate] : "2011/12/31"[PubDate]) NOT "pmc gds"[filter]"""
+updated_base_query_create = """("1901"[PubDate] : "2011/12/31"[PubDate]) AND "pmc gds"[filter]"""
 
 if True:
+    fh = open("scienceplot_new/results/pubmed_gse_count.csv", "w")
+    num_id_fields = ["year", "num_gse_ids"]
+    writer = csv.DictWriter(fh, num_id_fields)
+    writer.writerow(dict((fn,fn) for fn in writer.fieldnames))
     total_count = 0
-    for id_type in id_types:
+    for id_type in ["GSE"]:
         id_count = 0
         for year in geo_years:
             ids = geo.get_ids_by_year(id_type, year)
-            print "\t".join([str(year), id_type, str(len(ids))])
+            row_dict = dict(year=year, num_gse_ids=len(ids))
+            print row_dict.values()
+            writer.writerow(row_dict)
             id_count += len(ids)
         print id_type, id_count
         total_count += id_count
-    print total_count        
+    print total_count  
+    fh.close()
 
 
-    #all_dict = run_stats(submission_years, id_types, updated_base_query_all)
+year = "2009"
+#submission_years = [str(year) for year in range(2007,2008)]
+submission_years = [year]
+all_dict = run_stats(submission_years, id_types, updated_base_query_all)
 
-if False:
+if True:
     all_dict_dicts = []
     for cohort in all_dict.keys():
         for acc in all_dict[cohort]:
@@ -386,7 +399,7 @@ if False:
     new_fields.append("tagged_oa_excerpts")
     new_fields.append("cohort")
     
-    fh = open("scienceplot/results/records_2006.csv", "w")
+    fh = open("scienceplot_new/results/records_" + year + ".csv", "w")
     writer = csv.DictWriter(fh, new_fields)
     for row in all_dict_dicts:
         writer.writerow(row)
